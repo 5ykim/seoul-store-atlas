@@ -53,3 +53,29 @@ test('4분기 전체 점포 수와 전문상권 사례가 원본 집계와 일�
   assert.equal(q.rows[index].type, 1);
   assert.ok(q.rows[index].topShare > 0.86);
 });
+
+test('연간값은 업종별 분기 평균에서 재계산하며 분기별 다양성을 평균하지 않는다', () => {
+  const a = data.annual;
+  const quarters = Object.values(data.quarters);
+  let sawNonlinearDifference = false;
+  a.counts.forEach((counts, i) => {
+    const expected = Array.from({length:100}, (_, k) => quarters.reduce((sum,q) => sum+q.counts[i][k], 0)/4);
+    assert.deepEqual(counts, expected);
+    const total = expected.reduce((sum,n) => sum+n,0);
+    assert.equal(a.rows[i].total, total);
+    const entropy = -expected.reduce((s,n) => n ? s+n/total*Math.log(n/total) : s,0)/Math.log(100);
+    assert.ok(Math.abs(a.rows[i].entropy-entropy)<1e-7);
+    assert.ok(Math.abs(a.rows[i].density-total/data.dongs[i].area)<0.05);
+    const top = a.rows[i].top;
+    const cityIndustry = a.counts.reduce((s,row)=>s+row[top],0);
+    const lq = (counts[top]/total)/(cityIndustry/a.total);
+    assert.ok(Math.abs(a.rows[i].topLq-lq)<1e-6);
+    const averagedIndex = quarters.reduce((s,q)=>s+q.rows[i].entropy,0)/4;
+    if (Math.abs(entropy-averagedIndex)>0.0001) sawNonlinearDifference = true;
+  });
+  assert.ok(sawNonlinearDifference);
+  assert.equal(a.total, quarters.reduce((s,q)=>s+q.total,0)/4);
+  assert.equal(a.total,636753.75);
+  assert.equal(a.rows.reduce((s,r)=>s+r.total,0),a.total);
+  assert.equal(a.typeCounts.reduce((s,n)=>s+n,0),425);
+});

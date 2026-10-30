@@ -79,20 +79,28 @@ def analyze(stores, boundary):
               "area": round(float(regions.loc[code, "area_km2"]), 6)} for code in codes]
     output = {"industries": industries.values.tolist(), "dongs": dongs, "quarters": {}}
     results = []
+    matrices = []
     for quarter, group in stores.groupby("기준_년분기_코드"):
         matrix = group.pivot(index="행정동_코드", columns="서비스_업종_코드", values=COUNT)
         # 원본에 행이 없는 업종은 0으로 채우고, 행정동 전체 누락은 오류로 처리합니다.
         if set(matrix.index) != set(codes):
             raise ValueError(f"{quarter}에 행정동 전체가 누락되었습니다.")
         matrix = matrix.reindex(index=codes, columns=industry_codes).fillna(0).astype(int)
-        counts = matrix.to_numpy()
+        matrices.append((str(quarter), matrix.to_numpy()))
+    if [key for key, _ in matrices] != ['20251', '20252', '20253', '20254']:
+        raise ValueError("연간 대표값에는 2025년 네 분기가 모두 필요합니다.")
+    # 같은 점포가 분기마다 관측될 수 있으므로 합계 대신 업종별 평균을 구합니다.
+    # 다양성은 분기별 지수의 평균이 아니라, 평균 점포 구성에서 새로 계산합니다.
+    annual_counts = np.mean([counts for _, counts in matrices], axis=0)
+    for period, counts in [*matrices, ('annual', annual_counts)]:
+        annual = period == 'annual'
         totals = counts.sum(axis=1)
         densities = np.array([totals[i] / regions.loc[code, "area_km2"] for i, code in enumerate(codes)])
         entropies = np.array([diversity(row.tolist()) for row in counts], dtype=float)
         median_density = float(np.median(densities))
         median_entropy = float(np.median(entropies))
         city_industry = counts.sum(axis=0)
-        city_total = int(city_industry.sum())
+        city_total = float(city_industry.sum()) if annual else int(city_industry.sum())
         rows = []
         for i, code in enumerate(codes):
             dense = densities[i] >= median_density
@@ -101,13 +109,13 @@ def analyze(stores, boundary):
             top = int(np.argmax(counts[i]))
             share = float(counts[i, top] / totals[i]) if totals[i] else None
             lq = share / (city_industry[top] / city_total) if share is not None else None
-            row = {"total":int(totals[i]), "density":round(float(densities[i]), 6),
+            row = {"total":float(totals[i]) if annual else int(totals[i]), "density":round(float(densities[i]), 6),
                    "entropy":round(float(entropies[i]), 8), "type":kind,
                    "active":int((counts[i] > 0).sum()), "top":top,
                    "topShare":round(share, 8), "topLq":round(lq, 6)}
             rows.append(row)
-            results.append({"quarter":int(quarter), **dongs[i], **row})
-        output["quarters"][str(quarter)] = {
+            results.append({"quarter":period, **dongs[i], **row})
+        summary = {
             "rows":rows, "counts":counts.tolist(), "total":city_total,
             "medianDensity":median_density, "medianEntropy":median_entropy,
             "industryTotals":city_industry.tolist(),
@@ -115,6 +123,12 @@ def analyze(stores, boundary):
             "pearson":float(np.corrcoef(densities, entropies)[0, 1]),
             "spearman":float(pd.Series(densities).rank().corr(pd.Series(entropies).rank()))
         }
+        if annual:
+            output['annual'] = summary
+        else:
+            output['quarters'][period] = summary
+    output['annual']['label'] = '2025년 연간 대표값 (분기 평균)'
+    output['annual']['method'] = '행정동·업종별 1~4분기 점포 수의 산술평균으로 밀도·Entropy·LQ 재계산'
     return output, pd.DataFrame(results)
 
 
@@ -125,7 +139,28 @@ def build_report(data):
     diverse = max(combined, key=lambda d:d["entropy"])
     target = sorted([d for d in combined if d["type"] == 1], key=lambda d:d["density"], reverse=True)[:5]
     examples = "\n".join(f"- {d['district']} {d['name']}: {d['total']:,}개, {d['density']:,.1f}개/㎢, 다양성 {d['entropy']:.3f}. 최다 업종은 {data['industries'][d['top']][1]}({d['topShare']:.1%}), 해당 업종 LQ {d['topLq']:.2f}." for d in target)
-    return f"""# 가게는 많은데, 선택지는?
+    annual = data['annual']
+    changes = sorted(range(len(data['dongs'])), key=lambda i: q['rows'][i]['entropy'] - data['quarters']['20251']['rows'][i]['entropy'])
+    def change_example(i):
+        dong = data['dongs'][i]
+        first = data['quarters']['20251']['rows'][i]['entropy']
+        last = q['rows'][i]['entropy']
+        return f"{dong['district']} {dong['name']}: {first:.4f} → {last:.4f} ({last-first:+.4f})"
+    return f"""# 서울 동네별 점포 밀도와 업종 다양성
+가게가 많은 동네, 업종도 다양할까?
+
+## 2025년 연간 대표 분석
+행정동·업종별 1~4분기 점포 수의 산술평균을 구한 뒤 밀도·Entropy·LQ를 다시 계산했다. 분기별 점포 수를 더하거나 분기별 다양성 지수를 평균한 값이 아니다. 소수점 점포 수는 분기 평균값이다. 연중 영업한 고유 점포 수를 의미하지 않는다.
+서울의 분기 평균 점포 수는 {annual['total']:,.2f}개, 연간 대표 밀도 중앙값은 {annual['medianDensity']:,.1f}개/㎢, 다양성 중앙값은 {annual['medianEntropy']:.4f}이다.
+밀도와 다양성의 피어슨 상관계수는 {annual['pearson']:.3f}, 스피어만 순위 상관계수는 {annual['spearman']:.3f}이다.
+연간 대표 고밀도·저다양성 동은 {annual['typeCounts'][1]}개다. 연간 대표값과 분기별 결과를 별도로 제공한다.
+
+## 분기별 변화
+지도 재생은 네 분기를 합친 서울 전체 값의 고정 5분위 구간으로 색을 정해 비교한다. 네 유형 구분은 각 분석 시점의 중앙값에 따른 상대 분류이므로 변화 확인에는 다양성 수치와 고정 색상을 사용한다.
+변화 지도는 4분기 다양성에서 1분기 다양성을 뺀 절대 지수 차이를 표시한다. 이는 퍼센트 변화가 아니다.
+가장 크게 상승: {change_example(changes[-1])}
+가장 크게 하락: {change_example(changes[0])}
+동네별 추이에는 네 분기의 점포 수·밀도·다양성을 함께 표시한다. 업종 구성이 바뀐 이유나 동일 점포의 개·폐업을 직접 확인한 결과는 아니다.
 
 ## 연구 질문과 범위
 2025년 4분기 서울의 상권자료 기준 425개 행정동에서 점포 밀도가 높은 곳은 업종 구성도 다양한가? 두 지표가 엇갈리는 지역의 산업적 특징은 무엇인가?
