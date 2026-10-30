@@ -1,0 +1,10 @@
+node_modules/
+.wrangler/
+.venv/
+__pycache__/
+.env*
+.dev.vars*
+*.log
+source_data/boundary-unpacked/
+.qa/
+

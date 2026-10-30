@@ -1,0 +1,13 @@
+{
+  "name": "seoul-store-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "서울 행정동별 점포 밀도와 업종 다양성 분석",
+  "homepage": "https://seoul-store-atlas.pages.dev/",
+  "repository": { "type": "git", "url": "https://github.com/5ykim/seoul-store-atlas.git" },
+  "scripts": {
+    "preview": "node scripts/serve.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}
