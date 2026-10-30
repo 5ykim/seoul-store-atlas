@@ -84,6 +84,7 @@ npm test
 | GitHub 분석 코드와 원본 자료 | https://github.com/5ykim/seoul-store-atlas |
 
 노션 제출에 복사할 문구는 [제출 정보](docs/submission.txt)에 있습니다. 대표 이미지는 `store-atlas-preview.png`를 사용합니다.
+공개 접속·기능·자료·소스와 이미지의 최종 확인 결과는 [제출 전 확인](docs/pre-submission-check.md)에 정리했습니다.
 
 ## 해석의 한계
 
