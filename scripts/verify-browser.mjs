@@ -22,6 +22,13 @@ try {
   assert.equal(await page.locator('#quarter').inputValue(), 'annual');
   assert.match(await page.locator('#reference-note').innerText(), /636,753.75/);
   assert.equal(await page.locator('.trend-card').count(), 3);
+  const explanation = page.locator('#falling-list details').first();
+  await explanation.locator('summary').click();
+  assert.match(await explanation.innerText(), /일반의류/);
+  assert.match(await explanation.innerText(), /829/);
+  assert.match(await explanation.innerText(), /40.8%/);
+  assert.ok(await explanation.locator('table').count() >= 1);
+  await explanation.locator('summary').click();
   const titleSize = await page.locator('h1').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
   const subtitleSize = await page.locator('.hero-subtitle').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
   assert.ok(titleSize > subtitleSize);

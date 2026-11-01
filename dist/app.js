@@ -208,6 +208,16 @@ function renderAnnual() {
   $('annual-cards').innerHTML = cards.map(([label, value, note]) => `<article><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join('');
 }
 
+function industryChangeExplanation(i) {
+  const a = data.quarters['20251'], b = data.quarters['20254'];
+  const first = a.rows[i], last = b.rows[i];
+  const changes = data.industries.map((industry,k) => ({name:industry[1], before:a.counts[i][k], after:b.counts[i][k], change:b.counts[i][k]-a.counts[i][k]}));
+  const up = changes.filter(r=>r.change>0).sort((a,b)=>b.change-a.change).slice(0,3);
+  const down = changes.filter(r=>r.change<0).sort((a,b)=>a.change-b.change).slice(0,3);
+  const table = (items, label) => `<h4>${label}</h4>${items.length ? `<div class="industry-change-table"><table><thead><tr><th>업종</th><th>점포 수<br>1분기 → 4분기</th><th>증감</th><th>비중<br>1분기 → 4분기</th></tr></thead><tbody>${items.map(r=>`<tr><td>${esc(r.name)}</td><td>${fmt(r.before)} → ${fmt(r.after)}</td><td class="${r.change>0?'rise':'fall'}">${signed(r.change,0)}개</td><td>${fmt(r.before/first.total*100,1)}% → ${fmt(r.after/last.total*100,1)}%</td></tr>`).join('')}</tbody></table></div>`:'<p>해당하는 업종이 없습니다.</p>'}`;
+  return `<details class="industry-change"><summary>어떤 업종이 달라졌나요?</summary><div class="industry-change-body"><p><b>다양성 ${fmt(first.entropy,4)} → ${fmt(last.entropy,4)}</b><br>전체 점포 ${fmt(first.total)} → ${fmt(last.total)}개 · 점포가 있는 업종 ${first.active} → ${last.active}개</p><p>1분기 최다 업종은 ${esc(data.industries[first.top][1])}(${fmt(first.topShare*100,1)}%), 4분기는 ${esc(data.industries[last.top][1])}(${fmt(last.topShare*100,1)}%)입니다. 최다 업종 비중이 ${fmt(Math.abs(last.topShare-first.topShare)*100,1)}%p ${last.topShare>=first.topShare?'높아졌':'낮아졌'}습니다.</p>${table(up,'점포 증가 상위 3개 업종')}${table(down,'점포 감소 상위 3개 업종')}<p class="tiny">점포 수 증감 순위입니다. 다양성은 전체 100개 업종의 비중으로 계산하므로 점포 수가 늘어도 특정 업종에 집중되면 낮아질 수 있어요. 자료상 현황 차이로, 실제 개·폐업이나 분류 변경 여부까지 확인한 결과는 아닙니다.</p></div></details>`;
+}
+
 function renderChanges() {
   // 극단적인 한 동 때문에 작은 변화가 묻히지 않도록 ±0.005에서 색을 나눕니다.
   // 표시용 구간이며 통계적 유의성 기준이 아닙니다.
@@ -251,7 +261,7 @@ function renderChanges() {
   $('trend-reading').textContent = `다양성 ${fmt(first.entropy,4)} → ${fmt(last.entropy,4)} (${signed(delta(i))}). 점포 수 ${fmt(first.total)}개 → ${fmt(last.total)}개. 최다 업종은 ${data.industries[first.top][1]}(${fmt(first.topShare*100,1)}%) → ${data.industries[last.top][1]}(${fmt(last.topShare*100,1)}%)입니다.`;
   const ids = allVisible().sort((a,b) => delta(b)-delta(a));
   for (const [id, list] of [['rising-list', ids.filter((i) => delta(i) > 0).slice(0,5)], ['falling-list', [...ids].reverse().filter((i) => delta(i) < 0).slice(0,5)]]) {
-    $(id).innerHTML = list.length ? list.map((i, rank) => `<button class="change-rank" data-i="${i}"><span>${rank+1}. ${esc(data.dongs[i].district)} ${esc(data.dongs[i].name)}</span><b class="${delta(i)>0 ? 'rise' : 'fall'}">${signed(delta(i))}</b></button>`).join('') : '<p class="chart-sub">해당 방향의 변화가 있는 동네가 없습니다.</p>';
+    $(id).innerHTML = list.length ? list.map((i, rank) => `<div class="change-rank-item"><button class="change-rank" data-i="${i}"><span>${rank+1}. ${esc(data.dongs[i].district)} ${esc(data.dongs[i].name)}</span><b class="${delta(i)>0 ? 'rise' : 'fall'}">${signed(delta(i))}</b></button>${industryChangeExplanation(i)}</div>`).join('') : '<p class="chart-sub">해당 방향의 변화가 있는 동네가 없습니다.</p>';
     $(id).querySelectorAll('button').forEach((b) => b.addEventListener('click', () => choose(b.dataset.i)));
   }
 }
